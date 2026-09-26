@@ -68,3 +68,27 @@ def test_all_commands_register():
     names = sorted(c.qualified_name for c in tree.walk_commands() if isinstance(c, app_commands.Command))
     assert names == ["hunts query", "kills query", "kills total", "player castlename", "player discordname",
                      "player link", "player search", "purchases query"]
+
+
+def test_command_payload_within_discord_limits():
+    """Discord rejects the whole sync if any option breaks its limits (e.g. max_value > 2**53 - 1)."""
+    import discord
+    from discord import app_commands
+
+    tree = app_commands.CommandTree(discord.Client(intents=discord.Intents.none()))
+    bot.register_commands(tree, db=None)
+
+    def options(payload):
+        for option in payload.get("options", []):
+            yield option
+            yield from options(option)
+
+    for command in tree.get_commands():
+        payload = command.to_dict(tree)
+        assert 1 <= len(payload["description"]) <= 100
+        for option in options(payload):
+            assert 1 <= len(option.get("description", "x")) <= 100, option["name"]
+            for key in ("min_value", "max_value"):
+                if key in option:
+                    assert -(2**53 - 1) <= option[key] <= 2**53 - 1, (option["name"], key)
+            assert len(option.get("choices", [])) <= 25

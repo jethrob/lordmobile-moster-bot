@@ -14,6 +14,7 @@ Days = app_commands.Range[int, 1, 365]
 Category = Literal["Above", "Below"]
 Order = Literal["ascending", "descending"]
 MESSAGE_LIMIT = 1900  # Discord allows 2000 characters, leave room for code fences
+DISCORD_MAX_INT = 2**53 - 1  # largest integer option value Discord accepts
 
 
 def compact(n) -> str:
@@ -180,7 +181,7 @@ def register_commands(tree: app_commands.CommandTree, db: Database):
         await send_list(interaction, f"Players matching '{name}':", [f"IGG: {p['user_id']}, Name: {p['name']}" for p in found])
 
     @player.command(name="link", description="Link your IGG ID to your Discord account")
-    async def player_link(interaction: discord.Interaction, igg_id: app_commands.Range[int, 1, 2**53]):
+    async def player_link(interaction: discord.Interaction, igg_id: app_commands.Range[int, 1, DISCORD_MAX_INT]):
         db.link_user(interaction.user.id, interaction.guild_id, igg_id)
         await interaction.response.send_message(f"Your IGG ID {igg_id} is now linked.", ephemeral=True)
 
