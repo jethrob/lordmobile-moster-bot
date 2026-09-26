@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+build/
+dist/
+*.spec
+# runtime data when run from source (contains the bot token)
+monsterbot.db*
+logs/
+backups/

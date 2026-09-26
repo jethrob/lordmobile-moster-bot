@@ -1,0 +1,39 @@
+name: Release
+
+# Push a version tag to publish a release:  git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q --cov=monsterbot --cov=tools --cov-fail-under=80
+
+      - name: Stamp version from tag
+        shell: bash
+        run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > monsterbot/__init__.py
+
+      - name: Build MonsterBot.exe
+        run: pyinstaller --onefile --name MonsterBot --noconfirm run.py
+
+      - name: Checksum
+        shell: bash
+        run: cd dist && sha256sum MonsterBot.exe > MonsterBot.exe.sha256
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/MonsterBot.exe dist/MonsterBot.exe.sha256 --title "MonsterBot $GITHUB_REF_NAME" --generate-notes
