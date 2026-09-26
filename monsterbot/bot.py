@@ -227,8 +227,10 @@ def register_commands(tree: app_commands.CommandTree, db: Database):
         total = sum(p["kills"] or 0 for p in db.kills_gained(interaction.guild_id, days))
         await interaction.response.send_message(f"Guild kills gained over the past {days} days: **{compact(total)}**")
 
+    from .bank import register_bank  # bank.py uses helpers from this module
+
     guild_group, might = register_guild_and_might(db)
-    for group in (player, hunts, purchases, kills, guild_group, might):
+    for group in (player, hunts, purchases, kills, guild_group, might, register_bank(db)):
         tree.add_command(group)
 
 

@@ -66,7 +66,7 @@ def test_all_commands_register():
     tree = app_commands.CommandTree(client)
     bot.register_commands(tree, db=None)
     names = sorted(c.qualified_name for c in tree.walk_commands() if isinstance(c, app_commands.Command))
-    assert names == ["guild changes", "guild goals", "hunts query", "kills query", "kills total", "might growth",
+    assert names == ["bank list", "bank me", "bank player", "guild changes", "guild goals", "hunts query", "kills query", "kills total", "might growth",
                      "might top", "player castlename", "player discordname", "player link", "player search",
                      "purchases query"]
 

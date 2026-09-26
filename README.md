@@ -106,6 +106,9 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 | `/guild goals [days] [type] [below]` | Players below their **hunt** or **purchase** goal, as an average % over the period (default: below 100% over 7 days). Uses the goal set in LordsBot. |
 | `/might top [count]` | Strongest players right now (default: top 10) |
 | `/might growth [days] [order] [count]` | Might gained or lost per player, biggest gains first (or losses first with *ascending*) |
+| `/bank player <castlename>` | A player's guild bank balance: food, stone, wood, ore and gold |
+| `/bank me` | Your own bank balance (link your IGG ID first with `/player link`) |
+| `/bank list [resource] [count]` | Everyone with a bank balance, largest first, by total or by one resource |
 
 `days` defaults to 30 and can be up to 365.
 
@@ -122,6 +125,8 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 **`/kills total`** over the last *7* days: the guild's total kills gained.
 
 <img src="docs/screenshots/KillsTotalLast7Days.png" width="440" alt="Result of /kills total: guild kills gained over the past 7 days">
+
+**Bank balances** come straight from LordsBot's bank (`banksettings.json` in the bank castle's folder) each time a command runs, so they're always current. The bank castle must be linked to the Discord server on the **Links** page, and the bank enabled in LordsBot. With several bank castles linked, a player's balances are added together. Bank commands are open to everyone in the server. To limit them to officers, go to Discord **Server Settings → Integrations → MonsterBot → /bank**.
 
 **Players who left the guild.** A player missing from the exports for more than **3 days** (change this on the **Setup** page, 0 = never hide) is left out of `/hunts`, `/purchases`, `/kills`, `/guild goals`, `/might growth` and `/player search`. The days are counted back from the newest export, not from today, so a pause in imports doesn't hide everyone. `/player castlename` still finds them, marked "no longer in the guild exports", so you can look up their history.
 
@@ -190,6 +195,7 @@ monsterbot/
   main.py        entry point: starts the website, bot, importer and backups on one asyncio loop
   web.py         admin website (aiohttp, server-rendered HTML, localhost only): Setup, Links, Activity
   data_page.py   admin website Data page: folder import and clean-up
+  bank.py        /bank commands, reading LordsBot's banksettings.json live
   bot.py         discord.py client, slash commands, daily report
   importer.py    finds and parses LordsBot xlsx exports (type detected from the header row)
   db.py          SQLite schema, migrations (PRAGMA user_version) and queries
@@ -212,3 +218,9 @@ git push origin v0.1.0
 ```
 
 `.github/workflows/ci.yml` runs the tests on every push to `main` and on every pull request.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
