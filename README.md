@@ -26,7 +26,9 @@ Each guild runs its own bot, so your guild's data never leaves your PC.
 
 1. Open the **Discord Developer Portal** at <https://discord.com/developers/applications> and log in.
 2. Click **New Application** (top right). Name it, for example `MonsterBot` or `-R- Bot`, accept the terms and click **Create**.
-3. *(Optional)* On **General Information**, upload an icon and add a description. Members will see these.
+3. On **General Information**:
+   - *(Optional)* Upload an icon and add a description. Members will see these.
+   - Make sure **Interactions Endpoint URL** is **empty**. A new application has it empty already. If you're reusing an application that ran an older bot, delete the URL and click **Save Changes**. Otherwise Discord sends every command to that URL instead of to MonsterBot, and commands fail with *"didn't respond in time"*.
 4. Open the **Installation** tab. Set **Install Link** to **None** and click **Save Changes**.
    (Discord won't let you make the bot private in the next step while an install link is set.)
 5. Open the **Bot** tab:
@@ -137,7 +139,7 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 | Browser says the page can't be reached | MonsterBot isn't running. Start `MonsterBot.exe`. |
 | "Port 8080 is in use" in the log | MonsterBot is already running (check the taskbar), or another program uses port 8080. Set the `MONSTERBOT_PORT` environment variable to another port. |
 | Slash commands don't show up | Wait a minute and restart Discord (Ctrl+R). Check that the bot was invited with the link from the Setup page. |
-| Commands say "The application did not respond" | Check in the Developer Portal → **General Information** that **Interactions Endpoint URL** is **empty**. |
+| Commands say *"didn't respond in time"* or *"The application did not respond"* | In the Developer Portal → **General Information**, clear **Interactions Endpoint URL** and click **Save Changes**. If it is already empty, check that MonsterBot is running and the Setup page says **Connected**, then look in `logs\monsterbot.log`. |
 | No daily report | On **Links**, check the link is *Enabled* with *Daily report: yes*. Reports are only posted for exports from the last 2 days. Check the bot can post in the channel, and check the **Activity** page for errors. |
 | A file shows an error on Activity | Usually the file was still open or being written. Click **Re-import**. |
 
