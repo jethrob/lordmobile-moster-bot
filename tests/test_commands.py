@@ -165,3 +165,45 @@ def test_player_who_left_is_flagged(commands):
     db.upsert_rows("hunts", GUILD, TODAY - dt.timedelta(days=20), [hunt(9, "Gone", 3, 30)])
     [(_, embed, _)] = call(cmd["player castlename"], "Gone", 30)
     assert embed.title == "Lords Mobile history for Gone (no longer in the guild exports)"
+
+
+def test_guild_changes_goals_and_might_commands(commands):
+    db, cmd = commands
+    db.upsert_rows("guild_list", GUILD, TODAY, [member(1, "Alice", 3600), {**member(3, "Newbie", 0), "might": 5}])
+    [(text, _, _)] = call(cmd["guild changes"], 7)
+    assert "+ Newbie" in text and "- Bob" in text
+
+    [(text, _, _)] = call(cmd["guild goals"], 7, "hunt", 100)
+    assert "No hunt goal data" in text
+    db.upsert_rows("hunts", GUILD, TODAY, [{**hunt(1, "Alice", 5, 50), "hunt_goal_pct": 0.5},
+                                           {**hunt(2, "Bob", 9, 90), "hunt_goal_pct": 1.5}])
+    [(text, _, _)] = call(cmd["guild goals"], 7, "hunt", 100)
+    # Yesterday's rows (from the fixture) have a 0% goal and count: Alice (50+0)/2 = 25%, Bob (150+0)/2 = 75%
+    assert text.index("Goal:    25%, Name: Alice") < text.index("Goal:    75%, Name: Bob")
+    [(text, _, _)] = call(cmd["guild goals"], 7, "hunt", 50)
+    assert "Alice" in text and "Bob" not in text
+
+    [(text, _, _)] = call(cmd["might top"], 5)
+    assert "  1. Might:        5, Name: Newbie" in text  # newest export only, highest might first
+    db.upsert_rows("guild_list", GUILD, TODAY - dt.timedelta(days=3), [{**member(3, "Newbie", 0), "might": 1}])
+    [(text, _, _)] = call(cmd["might growth"], 7, "descending", 25)
+    assert "Might:        +4, Name: Newbie" in text
+
+
+def test_daily_report_lists_joiners_and_leavers(tmp_path):
+    db = Database(tmp_path / "t.db")
+    db.upsert_rows("guild_list", GUILD, TODAY - dt.timedelta(days=1), [member(1, "Stays", 0), member(2, "Leaver", 0)])
+    today = [member(1, "Stays", 0), {**member(3, "Joiner", 0), "kills_diff": 5}]
+    db.upsert_rows("guild_list", GUILD, TODAY, today)
+    parsed = importer.ParsedFile("guild_list", TODAY, today)
+    sent = []
+
+    async def send(embed):
+        sent.append(embed)
+
+    client = SimpleNamespace(is_ready=lambda: True, get_channel=lambda _id: SimpleNamespace(send=send),
+                             get_guild=lambda _id: None)
+    link = {"id": 1, "channel_id": 10, "discord_guild_id": GUILD, "label": "-R-"}
+    asyncio.run(bot.post_report(client, link, parsed, db))
+    members = sent[0].fields[-1]
+    assert members.name.startswith("👥 Members since") and members.value == "➕ Joined (1): Joiner\n➖ Left (1): Leaver"

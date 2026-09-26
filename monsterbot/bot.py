@@ -71,7 +71,17 @@ def player_embed(name: str, days: int, hunts: dict, kills: dict) -> discord.Embe
     return embed
 
 
-def report_embed(title: str, parsed: ParsedFile) -> discord.Embed:
+def signed(n) -> str:
+    return ("+" if (n or 0) > 0 else "") + compact(n)
+
+
+def members_field(changes: dict) -> str:
+    lines = [f"➕ Joined ({len(changes['joined'])}): {', '.join(changes['joined'])}" if changes["joined"] else "",
+             f"➖ Left ({len(changes['left'])}): {', '.join(changes['left'])}" if changes["left"] else ""]
+    return _truncate("\n".join(line for line in lines if line) or "No changes")
+
+
+def report_embed(title: str, parsed: ParsedFile, changes: dict | None = None) -> discord.Embed:
     embed = discord.Embed(title=f"📊 {title} daily report: {parsed.day.isoformat()}")
     rows = parsed.rows
     if parsed.kind == "hunts":
@@ -91,6 +101,8 @@ def report_embed(title: str, parsed: ParsedFile) -> discord.Embed:
             or "No kills gained",
             inline=False,
         )
+    if parsed.kind == "guild_list" and changes:
+        embed.add_field(name=f"👥 Members since {changes['previous']}", value=members_field(changes), inline=False)
     embed.set_footer(text=f"{len(rows)} players")
     return embed
 
@@ -132,14 +144,15 @@ def create_client(db: Database) -> discord.Client:
     return client
 
 
-async def post_report(client: discord.Client | None, link: dict, parsed: ParsedFile):
+async def post_report(client: discord.Client | None, link: dict, parsed: ParsedFile, db: Database | None = None):
     if client is None or not client.is_ready():
         log.warning("Bot not connected, skipped report for link %s", link["id"])
         return
     channel = client.get_channel(link["channel_id"]) or await client.fetch_channel(link["channel_id"])
     guild = client.get_guild(link["discord_guild_id"])
     title = link["label"] or (guild.name if guild else "Guild")
-    await channel.send(embed=report_embed(title, parsed))
+    changes = db.membership_diff(link["discord_guild_id"], parsed.day.isoformat()) if db else None
+    await channel.send(embed=report_embed(title, parsed, changes))
 
 
 def register_commands(tree: app_commands.CommandTree, db: Database):
@@ -214,5 +227,56 @@ def register_commands(tree: app_commands.CommandTree, db: Database):
         total = sum(p["kills"] or 0 for p in db.kills_gained(interaction.guild_id, days))
         await interaction.response.send_message(f"Guild kills gained over the past {days} days: **{compact(total)}**")
 
-    for group in (player, hunts, purchases, kills):
+    guild_group, might = register_guild_and_might(db)
+    for group in (player, hunts, purchases, kills, guild_group, might):
         tree.add_command(group)
+
+
+def register_guild_and_might(db: Database):
+    guild_group = app_commands.Group(name="guild", description="Guild members and goals", guild_only=True)
+    might = app_commands.Group(name="might", description="Guild might stats", guild_only=True)
+
+    @guild_group.command(name="changes", description="Who joined and who left the guild")
+    @app_commands.describe(days="Days of history (default 7)")
+    async def guild_changes(interaction: discord.Interaction, days: Days = 7):
+        await interaction.response.defer()
+        lines = []
+        for change in db.member_changes(interaction.guild_id, days):
+            lines += [f"{change['day']}  + {name}" for name in change["joined"]]
+            lines += [f"{change['day']}  - {name}" for name in change["left"]]
+        header = f"Members who joined (+) or left (-) in the past {days} days:"
+        await send_list(interaction, header, lines or ["No changes (or not enough guild list exports yet)."])
+
+    @guild_group.command(name="goals", description="Players below their hunt or purchase goal")
+    @app_commands.describe(days="Days to average (default 7)", type="Hunt or purchase goal",
+                           below="Show players below this % of the goal (default 100)")
+    async def guild_goals(interaction: discord.Interaction, days: Days = 7,
+                          type: Literal["hunt", "purchase"] = "hunt", below: app_commands.Range[int, 1, 1000] = 100):
+        await interaction.response.defer()
+        players = db.goal_averages(interaction.guild_id, days, type)
+        if not players or not any(p["pct"] for p in players):
+            await interaction.followup.send(f"No {type} goal data. Is a {type} goal set in LordsBot?")
+            return
+        behind = sorted((p for p in players if p["pct"] * 100 < below), key=lambda p: p["pct"])
+        lines = [f"Goal: {p['pct'] * 100:5.0f}%, Name: {p['name']}" for p in behind]
+        await send_list(interaction, f"{type.title()} goal below {below}% (average over {days} days):", lines)
+
+    @might.command(name="top", description="Strongest players in the guild right now")
+    async def might_top(interaction: discord.Interaction, count: app_commands.Range[int, 1, 100] = 10):
+        await interaction.response.defer()
+        players = db.might_top(interaction.guild_id, count)
+        lines = [f"{i:>3}. Might: {compact(p['might']):>8}, Name: {p['name']}" for i, p in enumerate(players, 1)]
+        await send_list(interaction, f"Top {count} by might:", lines)
+
+    @might.command(name="growth", description="Might gained (or lost) per player")
+    @app_commands.describe(days="Days of history (default 7)", order="Biggest gains first (descending) or losses first",
+                           count="How many players to show (default 25)")
+    async def might_growth(interaction: discord.Interaction, days: Days = 7, order: Order = "descending",
+                           count: app_commands.Range[int, 1, 100] = 25):
+        await interaction.response.defer()
+        players = sorted(db.might_growth(interaction.guild_id, days), key=lambda p: p["growth"] or 0,
+                         reverse=order == "descending")[:count]
+        lines = [f"Might: {signed(p['growth']):>9}, Name: {p['name']}" for p in players]
+        await send_list(interaction, f"Might growth over {days} days:", lines)
+
+    return guild_group, might

@@ -119,7 +119,7 @@ async def main():
         webbrowser.open(url + "setup")
 
     async def on_imported(link, parsed):
-        await post_report(rt.client, link, parsed)
+        await post_report(rt.client, link, parsed, rt.db)
 
     try:
         await asyncio.gather(run_bot(rt), importer.run_forever(db, on_imported), backup_forever(db, home / "backups"))

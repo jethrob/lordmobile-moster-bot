@@ -135,3 +135,40 @@ def test_delete_all_data_per_server_and_forget_files(db):
 
 def test_castle_name_from_any_table(db):
     assert db.castle_name("1") == "Alice2" and db.castle_name(2) == "Bob" and db.castle_name("404") is None
+
+
+def goal_hunt(user_id, name, hunt_pct, purchase_pct=None):
+    return {**hunt(user_id, name), "hunt_goal_pct": hunt_pct, "purchase_goal_pct": purchase_pct}
+
+
+def test_membership_diff_and_changes(db):
+    ago = lambda n: (TODAY - dt.timedelta(days=n)).isoformat()
+    assert db.membership_diff(GUILD, ago(40)) is None  # first export: nothing to compare with
+    assert db.membership_diff(GUILD, ago(2)) == {"day": ago(2), "previous": ago(40), "joined": ["Bob"], "left": []}
+    db.upsert_rows("guild_list", GUILD, TODAY, [member(1, "Alice2", 1600), member(4, "dave", 0)])
+    today = db.membership_diff(GUILD, TODAY.isoformat())
+    assert today["joined"] == ["dave"] and today["left"] == ["Bob"] and today["previous"] == ago(1)
+    changes = db.member_changes(GUILD, 30)
+    # ago(2) is compared with the export 40 days ago (outside the window) so Bob's arrival still shows; ago(1): no change
+    assert [c["day"] for c in changes] == [ago(2), TODAY.isoformat()]
+    assert db.member_changes(999, 30) == []
+
+
+def test_goal_averages(tmp_path):
+    db = Database(tmp_path / "goals.db")
+    db.upsert_rows("hunts", GUILD, TODAY, [goal_hunt(1, "Alice2", 1.2, 0.5), goal_hunt(2, "Bob", 0.4)])
+    db.upsert_rows("hunts", GUILD, TODAY - dt.timedelta(days=1), [goal_hunt(1, "Alice2", 0.8), goal_hunt(2, "Bob", 0.2)])
+    hunts = {r["name"]: round(r["pct"], 2) for r in db.goal_averages(GUILD, 7)}
+    assert hunts == {"Alice2": 1.0, "Bob": 0.3}
+    assert {r["name"]: r["pct"] for r in db.goal_averages(GUILD, 7, "purchase")} == {"Alice2": 0.5}  # NULLs ignored
+
+
+def test_might_top_and_growth(db):
+    ago = lambda n: TODAY - dt.timedelta(days=n)
+    db.upsert_rows("guild_list", GUILD, ago(3), [{**member(1, "Alice2", 0), "might": 1000},
+                                                 {**member(2, "Bob", 0), "might": 500}])
+    db.upsert_rows("guild_list", GUILD, TODAY, [{**member(1, "Alice2", 0), "might": 900},
+                                                {**member(2, "Bob", 0), "might": 2500}])
+    assert [(p["name"], p["might"]) for p in db.might_top(GUILD, 1)] == [("Bob", 2500)]
+    growth = {p["name"]: p["growth"] for p in db.might_growth(GUILD, 7)}
+    assert growth == {"Bob": 2000, "Alice2": -100}  # newest minus oldest in the window, losses included

@@ -298,6 +298,65 @@ class Database:
             guild, _since(days), self.active_cutoff("guild_list", guild),
         )
 
+    # --- membership, goals and might (/guild, /might) --------------------------------------------
+    def membership_diff(self, guild, day: str) -> dict | None:
+        """Who joined / left between the previous guild-list export and `day` (None if there is no earlier one)."""
+        previous = self._one(
+            "SELECT MAX(day) AS d FROM guild_list WHERE discord_guild_id = ? AND day < ?", guild, day
+        )["d"]
+        if previous is None:
+            return None
+        members = lambda d: {
+            r["user_id"]: r["name"]
+            for r in self._all("SELECT user_id, name FROM guild_list WHERE discord_guild_id = ? AND day = ?", guild, d)
+        }
+        now, before = members(day), members(previous)
+        by_name = lambda ids, names: sorted((names[i] for i in ids), key=str.lower)
+        return {
+            "day": day, "previous": previous,
+            "joined": by_name(now.keys() - before.keys(), now), "left": by_name(before.keys() - now.keys(), before),
+        }
+
+    def member_changes(self, guild, days) -> list[dict]:
+        """membership_diff for every guild-list export in the window that had joiners or leavers."""
+        export_days = [r["day"] for r in self._all(
+            "SELECT DISTINCT day FROM guild_list WHERE discord_guild_id = ? AND day >= ? ORDER BY day", guild, _since(days)
+        )]
+        diffs = (self.membership_diff(guild, d) for d in export_days)
+        return [d for d in diffs if d and (d["joined"] or d["left"])]
+
+    def goal_averages(self, guild, days, kind="hunt"):
+        """Average daily goal percentage (1.0 = 100%) per player, from LordsBot's GIFT_STATS goal columns."""
+        column = {"hunt": "hunt_goal_pct", "purchase": "purchase_goal_pct"}[kind]
+        return self._all(
+            f"SELECT user_id, {_latest_name('hunts')} AS name, AVG({column}) AS pct, COUNT({column}) AS days"
+            f" FROM hunts h WHERE discord_guild_id = ? AND day >= ? AND {column} IS NOT NULL"
+            " GROUP BY user_id HAVING MAX(day) >= ?",
+            guild, _since(days), self.active_cutoff("hunts", guild),
+        )
+
+    def might_top(self, guild, count):
+        """Current might ranking from the newest guild-list export (so only current members)."""
+        return self._all(
+            "SELECT user_id, name, might FROM guild_list WHERE discord_guild_id = ?"
+            " AND day = (SELECT MAX(day) FROM guild_list WHERE discord_guild_id = ?) ORDER BY might DESC LIMIT ?",
+            guild, guild, count,
+        )
+
+    def might_growth(self, guild, days):
+        """Might at the newest export minus might at the oldest export in the window (can be negative)."""
+        since = _since(days)
+        edge = lambda direction: (
+            "(SELECT might FROM guild_list x WHERE x.discord_guild_id = h.discord_guild_id AND x.user_id = h.user_id"
+            f" AND x.day >= ? ORDER BY x.day {direction} LIMIT 1)"
+        )
+        return self._all(
+            f"SELECT user_id, {_latest_name('guild_list')} AS name, {edge('DESC')} - {edge('ASC')} AS growth,"
+            " COUNT(*) AS days FROM guild_list h WHERE discord_guild_id = ? AND day >= ?"
+            " GROUP BY user_id HAVING MAX(day) >= ?",
+            since, since, guild, since, self.active_cutoff("guild_list", guild),
+        )
+
     def day_rows(self, kind, guild, day: dt.date):
         if kind not in TABLES:
             raise ValueError(kind)

@@ -102,6 +102,10 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 | `/purchases query <Above/Below> <value> [order] [days]` | The same, for purchase points |
 | `/kills query <Above/Below> <value> [order] [days]` | Players whose kills gained are above or below a value |
 | `/kills total [days]` | Total kills gained by the guild |
+| `/guild changes [days]` | Who joined and who left the guild, by date (default: past 7 days) |
+| `/guild goals [days] [type] [below]` | Players below their **hunt** or **purchase** goal, as an average % over the period (default: below 100% over 7 days). Uses the goal set in LordsBot. |
+| `/might top [count]` | Strongest players right now (default: top 10) |
+| `/might growth [days] [order] [count]` | Might gained or lost per player, biggest gains first (or losses first with *ascending*) |
 
 `days` defaults to 30 and can be up to 365.
 
@@ -119,12 +123,12 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 
 <img src="docs/screenshots/KillsTotalLast7Days.png" width="440" alt="Result of /kills total: guild kills gained over the past 7 days">
 
-**Players who left the guild.** A player missing from the exports for more than **3 days** (change this on the **Setup** page, 0 = never hide) is left out of `/hunts`, `/purchases`, `/kills` and `/player search`. The days are counted back from the newest export, not from today, so a pause in imports doesn't hide everyone. `/player castlename` still finds them, marked "no longer in the guild exports", so you can look up their history.
+**Players who left the guild.** A player missing from the exports for more than **3 days** (change this on the **Setup** page, 0 = never hide) is left out of `/hunts`, `/purchases`, `/kills`, `/guild goals`, `/might growth` and `/player search`. The days are counted back from the newest export, not from today, so a pause in imports doesn't hide everyone. `/player castlename` still finds them, marked "no longer in the guild exports", so you can look up their history.
 
 **Daily report.** When a new export arrives, MonsterBot posts:
 
 - **GIFT_STATS:** the top 5 hunters of the day, and every member with zero hunts.
-- **GUILD_LIST:** the top 5 kills gained since LordsBot's previous export.
+- **GUILD_LIST:** the top 5 kills gained since LordsBot's previous export, and who **joined** or **left** the guild since then.
 
 ---
 
