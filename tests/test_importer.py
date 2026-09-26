@@ -111,11 +111,17 @@ def test_failed_import_recorded_not_raised(setup):
     assert importer.pending_files(db, link) == []  # not retried every minute
 
 
-def test_discover_folders(tmp_path):
-    (tmp_path / "a" / "123" / "stats" / "exported").mkdir(parents=True)
-    (tmp_path / "b" / "exported").mkdir(parents=True)  # not under "stats"
-    assert importer.discover_folders(tmp_path) == [tmp_path / "a" / "123" / "stats" / "exported"]
-    assert importer.discover_folders(tmp_path / "missing") == []
+def test_discover_castles(tmp_path):
+    config = tmp_path / "LordsBot" / "config"
+    for igg in ("900", "123"):
+        (config / igg / "stats" / "exported").mkdir(parents=True)
+    (config / "settings" / "stats" / "exported").mkdir(parents=True)  # not an IGG ID
+    (config / "456" / "exported").mkdir(parents=True)  # not under "stats"
+    expected = {"123": config / "123" / "stats" / "exported", "900": config / "900" / "stats" / "exported"}
+    assert importer.discover_castles(config) == expected
+    assert importer.discover_castles(tmp_path / "LordsBot") == expected  # the folder above config works too
+    assert importer.discover_folders(config) == list(expected.values())
+    assert importer.discover_castles(tmp_path / "missing") == {}
 
 
 def test_should_report_only_fresh_files_with_channel():

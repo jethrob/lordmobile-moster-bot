@@ -50,23 +50,23 @@ def run(coro_fn):
 
 @pytest.fixture
 def folder(tmp_path):
-    f = tmp_path / "LordsBot" / "123" / "stats" / "exported"
+    f = tmp_path / "LordsBot" / "config" / "123" / "stats" / "exported"
     f.mkdir(parents=True)
     return f
 
 
 def test_pages_render_and_escape_names(tmp_path, folder):
     async def check(client, rt):
-        rt.db.set_setting("root_folder", str(tmp_path / "LordsBot"))
+        rt.db.set_setting("root_folder", str(tmp_path / "LordsBot" / "config"))
         for path in ("/setup", "/links", "/activity"):
             resp = await client.get(path)
             assert resp.status == 200, path
         links = await (await client.get("/links")).text()
         assert "&lt;b&gt;Guild&lt;/b&gt;" in links and "<b>Guild</b>" not in links
         assert "#reports" in links and "#readonly" not in links  # only channels the bot can post in
-        assert "1 export folder(s) found" in links
+        assert "1 castle(s) found" in links and '<option value="123">123</option>' in links
         setup = await (await client.get("/setup")).text()
-        assert "client_id=42" in setup
+        assert "client_id=42" in setup and "Found 1 castle(s): 123" in setup
 
     asyncio.run(run(check)(tmp_path, with_bot=True))
 
@@ -102,20 +102,23 @@ def test_setup_rejects_missing_root_folder(tmp_path):
 
 def test_add_link_validates_and_toggles(tmp_path, folder):
     async def check(client, rt):
+        rt.db.set_setting("root_folder", str(tmp_path / "LordsBot"))  # parent of config\ also works
         post = lambda path, data: client.post(path, data=data, allow_redirects=False)
         bad = [
-            {"folder": str(tmp_path / "missing"), "target": "1:10"},
-            {"folder": str(folder), "target": "junk"},
-            {"folder": str(folder), "target": "999:10"},  # server the bot isn't in
-            {"folder": str(folder), "target": "1:77"},  # channel not in that server
+            {"igg": "999", "target": "1:10"},  # no folder for this castle
+            {"igg": "../123", "target": "1:10"},
+            {"igg": "123", "target": "junk"},
+            {"igg": "123", "target": "999:10"},  # server the bot isn't in
+            {"igg": "123", "target": "1:77"},  # channel not in that server
         ]
         for data in bad:
             await post("/links", data)
         assert rt.db.links() == []
 
-        await post("/links", {"folder": str(folder), "label": "-R-", "target": "1:10", "post_report": "on"})
-        await post("/links", {"folder": str(folder), "label": "-R-", "target": "1:", "post_report": "on"})
+        await post("/links", {"igg": "123", "label": "-R-", "target": "1:10", "post_report": "on"})
+        await post("/links", {"igg": " 123 ", "label": "-R-", "target": "1:", "post_report": "on"})
         with_channel, import_only = rt.db.links()
+        assert with_channel["folder"] == str(folder)
         assert with_channel["channel_id"] == 10 and with_channel["post_report"] == 1
         assert import_only["channel_id"] is None and import_only["post_report"] == 0  # no channel, no report
 
@@ -130,7 +133,7 @@ def test_add_link_validates_and_toggles(tmp_path, folder):
 
 def test_add_link_needs_connected_bot(tmp_path, folder):
     async def check(client, rt):
-        await client.post("/links", data={"folder": str(folder), "target": "1:10"}, allow_redirects=False)
+        await client.post("/links", data={"igg": "123", "target": "1:10"}, allow_redirects=False)
         assert rt.db.links() == []
         assert "Connect the bot" in await (await client.get("/links")).text()
 
@@ -238,3 +241,42 @@ def test_data_cleanup_needs_confirmation_and_backs_up(tmp_path):
         assert rt.db.data_summary() == [] and not rt.db.is_imported("C:/f.xlsx", 3)
 
     asyncio.run(run_with_backups(check)(tmp_path, with_bot=False))
+
+
+def test_setup_browse_uses_native_picker(tmp_path, folder, monkeypatch):
+    chosen = str(tmp_path / "LordsBot" / "config")
+    picks = iter([chosen, None])
+    monkeypatch.setattr(web.picker, "supported", lambda: True)
+    monkeypatch.setattr(web.picker, "pick_folder", lambda start: next(picks))
+
+    async def check(client, rt):
+        assert "Browse…" in await (await client.get("/setup")).text()
+        resp = await client.post("/setup/browse", allow_redirects=False)
+        assert "Found%201%20castle" in resp.headers["Location"] and rt.db.get_setting("root_folder") == chosen
+        resp = await client.post("/setup/browse", allow_redirects=False)  # cancelled: setting unchanged
+        assert "No%20folder%20chosen" in resp.headers["Location"] and rt.db.get_setting("root_folder") == chosen
+
+    asyncio.run(run(check)(tmp_path, with_bot=False))
+
+
+def test_setup_warns_when_no_castles_found(tmp_path):
+    async def check(client, rt):
+        rt.db.set_setting("root_folder", str(tmp_path))
+        assert "No castle folders found here" in await (await client.get("/setup")).text()
+
+    asyncio.run(run(check)(tmp_path, with_bot=False))
+
+
+def test_links_show_castle_names(tmp_path, folder):
+    import datetime as dt
+
+    from tests.test_db import hunt
+
+    async def check(client, rt):
+        rt.db.set_setting("root_folder", str(tmp_path / "LordsBot" / "config"))
+        rt.db.upsert_rows("hunts", 1, dt.date.today(), [hunt(123, "<Castle>")])
+        rt.db.add_link(str(folder), "-R-", 1, 10, post_report=True)
+        text = await (await client.get("/links")).text()
+        assert "123 (&lt;Castle&gt;)" in text and "<Castle>" not in text
+
+    asyncio.run(run(check)(tmp_path, with_bot=True))

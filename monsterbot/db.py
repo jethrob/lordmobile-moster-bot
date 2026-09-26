@@ -227,6 +227,15 @@ class Database:
             found["left"] = bool(cutoffs) and found["day"] < min(cutoffs)
         return found
 
+    def castle_name(self, igg) -> str | None:
+        """Latest in-game name for an IGG ID, from any server's data (used to label castles on the Links page)."""
+        row = self._one(
+            "SELECT name FROM (SELECT name, day FROM hunts WHERE user_id = ?"
+            " UNION ALL SELECT name, day FROM guild_list WHERE user_id = ?) ORDER BY day DESC LIMIT 1",
+            int(igg), int(igg),
+        )
+        return row["name"] if row else None
+
     # --- players who left the guild ---------------------------------------------------------------
     def inactive_days(self) -> int:
         return int(self.get_setting("inactive_days", DEFAULT_INACTIVE_DAYS))

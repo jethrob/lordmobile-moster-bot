@@ -86,11 +86,23 @@ def _clean(value):
     return None if value == "" else value
 
 
+def discover_castles(root: Path) -> dict[str, Path]:
+    """Castle IGG ID -> export folder.
+
+    LordsBot keeps one folder per castle: C:\\LordsBot\\config\\<IGG>\\stats\\exported. `root` may be the
+    config folder itself or the LordsBot folder above it.
+    """
+    found = {}
+    for pattern in ("*/stats/exported", "config/*/stats/exported"):
+        for folder in root.glob(pattern):
+            igg = folder.parent.parent.name
+            if igg.isdigit() and folder.is_dir():
+                found.setdefault(igg, folder)
+    return dict(sorted(found.items(), key=lambda item: int(item[0])))
+
+
 def discover_folders(root: Path) -> list[Path]:
-    """All '<IGG>\\stats\\exported' folders under the LordsBot root."""
-    if not root.is_dir():
-        return []
-    return sorted(p for p in root.rglob("exported") if p.is_dir() and p.parent.name.lower() == "stats")
+    return list(discover_castles(root).values())
 
 
 def pending_files(db: Database, link: dict, now: float | None = None) -> list[Path]:

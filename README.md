@@ -55,7 +55,7 @@ You'll invite the bot to your server in Step 3. MonsterBot builds the invite lin
 On the **Setup** page:
 
 1. Paste the **bot token** from Step 1.
-2. Check the **LordsBot folder** (default `C:\LordsBot`). This is the folder that contains your castles' `<IGG ID>\stats\exported` folders.
+2. Check the **LordsBot config folder** (default `C:\LordsBot\config`). LordsBot keeps one folder per castle in it, named after the castle's IGG ID, with the exports in `<IGG ID>\stats\exported`. Click **Browse…** to pick it in a Windows folder window. The page then lists the castles it found, for example *Found 2 castle(s): 123456789, 987654321*.
 3. Click **Save**. After a few seconds, refresh: the status should say **Connected as YourBot#1234**.
    If it says *Discord rejected the token*, copy the token again (or reset it) and paste it once more.
 4. Click **Invite bot to a server**, choose your Discord server and click **Authorize**.
@@ -63,18 +63,18 @@ On the **Setup** page:
 
 The slash commands appear in your server within a minute. If they don't, restart Discord (Ctrl+R).
 
-### Step 4: Link your LordsBot folders to Discord
+### Step 4: Link your castles to Discord
 
 On the **Links** page:
 
-1. **Export folder**: pick one of the discovered `...\stats\exported` folders from the list (start typing), or paste a path.
+1. **Castle IGG ID**: pick the castle from the list, or type its IGG ID. MonsterBot finds its `stats\exported` folder by itself. Once a castle's data has been imported, the list also shows its name.
 2. **Guild name**: shown as the title of the daily report, for example `-R-`.
 3. **Discord server and channel**: the channel the daily report is posted in. Pick "*import only, no posts*" if you only want the slash commands.
 4. Tick **Post the daily report** and click **Add link**.
 
-Within a minute MonsterBot imports every export already in that folder (older files are imported quietly, without reports), then keeps checking for new ones every minute. Check the **Activity** page to see what was imported.
+Within a minute MonsterBot imports every export already in that castle's folder (older files are imported quietly, without reports), then keeps checking for new ones every minute. Check the **Activity** page to see what was imported.
 
-You can add as many links as you like: several castles or guilds, one folder to several channels, or several Discord servers.
+You can add as many links as you like: several castles or guilds, one castle to several channels, or several Discord servers.
 
 ### Step 5 (optional): Import older exports
 

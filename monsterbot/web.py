@@ -8,11 +8,11 @@ from urllib.parse import quote
 import discord
 from aiohttp import web
 
-from . import autostart
+from . import autostart, picker
 from .db import MANUAL_IMPORT, Database
-from .importer import discover_folders, import_file
+from .importer import discover_castles, import_file
 
-DEFAULT_ROOT = r"C:\LordsBot"
+DEFAULT_ROOT = r"C:\LordsBot\config"
 INVITE_PERMISSIONS = discord.Permissions(view_channel=True, send_messages=True, embed_links=True)
 
 
@@ -84,12 +84,24 @@ async def setup_page(request: web.Request):
 <p>Start with Windows: <strong>{"on" if on else "off"}</strong> <button>{"Turn off" if on else "Turn on"}</button></p></form>"""
     else:
         auto = "<p class=muted>Start with Windows is available in the packaged MonsterBot.exe.</p>"
+    root = Path(db.get_setting("root_folder", DEFAULT_ROOT))
+    castles = await asyncio.to_thread(discover_castles, root)
+    if castles:
+        found = f'<p class="ok">Found {len(castles)} castle(s): {e(", ".join(castles))}</p>'
+    else:
+        found = ('<p class="bad">No castle folders found here. Choose the LordsBot <strong>config</strong> folder, '
+                 'the one that has a folder per castle IGG ID (usually C:\\LordsBot\\config).</p>')
+    browse = (
+        '<button formaction="/setup/browse" formnovalidate>Browse…</button>' if picker.supported() else ""
+    )
     body = f"""
 <section><h2>Status</h2><p class="{status_class}">{e(rt.status)}</p>{bot_info}{auto}</section>
 <section><h2>Settings</h2><form method="post" action="/setup">
 <label>Discord bot token<input type="password" name="token" autocomplete="off"
  placeholder="{"Saved. Paste a new token to replace it" if has_token else "Paste your bot token"}"></label>
-<label>LordsBot folder<input name="root" value="{e(db.get_setting("root_folder", DEFAULT_ROOT))}"></label>
+<label>LordsBot config folder<input name="root" value="{e(root)}"></label>
+<p class="muted">The folder with one sub-folder per castle IGG ID, e.g. <code>C:\\LordsBot\\config</code>.
+Exports are read from <code>&lt;IGG&gt;\\stats\\exported</code> inside it.</p>{found}{browse}
 <label>Hide players missing from the exports for this many days (they probably left the guild; 0 = never hide)
 <input type="number" name="inactive_days" min="0" max="365" value="{db.inactive_days()}"></label>
 <button>Save</button></form>
@@ -116,6 +128,17 @@ async def setup_save(request: web.Request):
         rt.status = "Connecting…"
         rt.restart.set()
     redirect("/setup", "Saved." + (" Connecting to Discord, refresh in a few seconds." if token else ""))
+
+
+async def setup_browse(request: web.Request):
+    rt: Runtime = request.app[RT]
+    current = rt.db.get_setting("root_folder", DEFAULT_ROOT)
+    chosen = await asyncio.to_thread(picker.pick_folder, current)
+    if not chosen:
+        redirect("/setup", "No folder chosen.")
+    rt.db.set_setting("root_folder", chosen)
+    castles = await asyncio.to_thread(discover_castles, Path(chosen))
+    redirect("/setup", f"LordsBot folder set to {chosen}. Found {len(castles)} castle(s).")
 
 
 async def autostart_save(request: web.Request):
@@ -157,22 +180,25 @@ async def links_page(request: web.Request):
                              ("post_report", "Stop report" if link["post_report"] else "Post report"),
                              ("delete", "Delete"))
         )
-        rows.append(f"""<tr><td>{e(link["label"])}</td><td class="path">{e(link["folder"])}</td>
+        igg = Path(link["folder"]).parent.parent.name
+        rows.append(f"""<tr><td>{e(link["label"])}</td><td title="{e(link["folder"])}">{e(castle_label(rt.db, igg))}</td>
 <td>{e(guild_name)}</td><td>{e(channel_name)}</td><td>{"yes" if link["post_report"] else "no"}</td>
 <td>{"yes" if link["enabled"] else "no"}</td>
 <td><form method="post" action="/links/{link["id"]}">{actions}</form></td></tr>""")
     table = (
-        "<table><tr><th>Guild</th><th>Folder</th><th>Discord server</th><th>Channel</th><th>Daily report</th>"
+        "<table><tr><th>Guild</th><th>Castle</th><th>Discord server</th><th>Channel</th><th>Daily report</th>"
         f"<th>Enabled</th><th></th></tr>{''.join(rows)}</table>" if rows else "<p>No links yet.</p>"
     )
     if rt.ready:
         root = Path(rt.db.get_setting("root_folder", DEFAULT_ROOT))
-        folders = await asyncio.to_thread(discover_folders, root)
-        datalist = "".join(f'<option value="{e(f)}">' for f in folders)
-        found = f"{len(folders)} export folder(s) found under {e(root)}." if folders else f"No export folders found under {e(root)}."
+        castles = await asyncio.to_thread(discover_castles, root)
+        options = "".join(f'<option value="{igg}">{e(castle_label(rt.db, igg))}</option>' for igg in castles)
+        found = (f"{len(castles)} castle(s) found in {e(root)}." if castles
+                 else f'No castles found in {e(root)}. Check the folder on <a href="/setup">Setup</a>.')
         add = f"""<form method="post" action="/links">
-<label>Export folder<input name="folder" list="folders" required placeholder="C:\\LordsBot\\...\\stats\\exported"></label>
-<datalist id="folders">{datalist}</datalist><p class="muted">{found}</p>
+<label>Castle IGG ID<input name="igg" list="castles" required inputmode="numeric" pattern="[0-9]+"
+ placeholder="e.g. 123456789"></label>
+<datalist id="castles">{options}</datalist><p class="muted">{found} Pick one from the list or type the IGG ID.</p>
 <label>Guild name (shown in reports)<input name="label" maxlength="50" placeholder="-R-"></label>
 <label>Discord server and channel<select name="target" required>{channel_options(rt.client)}</select></label>
 <label class="check"><input type="checkbox" name="post_report" checked> Post the daily report to this channel</label>
@@ -190,9 +216,11 @@ def parse_target(value: str) -> tuple[int, int | None]:
 async def links_add(request: web.Request):
     rt: Runtime = request.app[RT]
     form = await request.post()
-    folder = form.get("folder", "").strip()
-    if not folder or not Path(folder).is_dir():
-        redirect("/links", f"Folder not found: {folder}")
+    igg = form.get("igg", "").strip()
+    root = Path(rt.db.get_setting("root_folder", DEFAULT_ROOT))
+    folder = (await asyncio.to_thread(discover_castles, root)).get(igg)
+    if folder is None:
+        redirect("/links", f"No export folder for IGG ID {igg} in {root}. Check the LordsBot folder on Setup.")
     try:
         guild_id, channel_id = parse_target(form.get("target", ""))
     except ValueError:
@@ -201,8 +229,13 @@ async def links_add(request: web.Request):
     if guild is None or (channel_id is not None and guild.get_channel(channel_id) is None):
         redirect("/links", "That server or channel isn't available to the bot.")
     post_report = bool(form.get("post_report")) and channel_id is not None
-    rt.db.add_link(folder, form.get("label", "").strip()[:50], guild_id, channel_id, post_report)
+    rt.db.add_link(str(folder), form.get("label", "").strip()[:50], guild_id, channel_id, post_report)
     redirect("/links", "Link added. Existing files in the folder are imported within a minute.")
+
+
+def castle_label(db: Database, igg: str) -> str:
+    name = db.castle_name(igg) if igg.isdigit() else None
+    return f"{igg} ({name})" if name else igg
 
 
 async def links_action(request: web.Request):
@@ -273,7 +306,7 @@ def create_app(rt: Runtime) -> web.Application:
     app.add_routes([
         web.get("/", index),
         web.get("/setup", setup_page), web.post("/setup", setup_save),
-        web.post("/autostart", autostart_save),
+        web.post("/setup/browse", setup_browse), web.post("/autostart", autostart_save),
         web.get("/links", links_page), web.post("/links", links_add), web.post(r"/links/{id:\d+}", links_action),
         web.get("/activity", activity_page), web.post("/activity/reimport", activity_reimport),
         *data_page.routes(),

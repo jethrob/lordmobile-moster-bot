@@ -131,3 +131,7 @@ def test_delete_all_data_per_server_and_forget_files(db):
     assert db.is_imported("C:/a.xlsx", 1) and not db.is_imported("C:/b.xlsx", 2)
     assert db.delete_all_data(forget_files=False) == 10
     assert db.data_summary() == [] and db.is_imported("C:/a.xlsx", 1)
+
+
+def test_castle_name_from_any_table(db):
+    assert db.castle_name("1") == "Alice2" and db.castle_name(2) == "Bob" and db.castle_name("404") is None
