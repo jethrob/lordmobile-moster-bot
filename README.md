@@ -143,23 +143,6 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 
 ---
 
-## Moving from the old MonsterBot (API + slash bot on Kubernetes)
-
-1. **Discord Developer Portal → General Information:** clear **Interactions Endpoint URL** and save. Otherwise Discord keeps sending commands to the old server.
-2. Reset the bot token (the old one was exposed) and paste the new token into MonsterBot.
-3. Copy your history out of the old MongoDB (Python 3.12, from a clone of this repo):
-   ```powershell
-   pip install pymongo
-   kubectl port-forward svc/mongodb 27017:27017      # in a second terminal
-   python tools\migrate_from_mongo.py "mongodb://USER:PASS@127.0.0.1:27017/lordsmobiledb" C:\MonsterBot\monsterbot.db
-   ```
-   Stop MonsterBot while the script runs. It can be run more than once safely. Bank data (`playerbanks`) isn't migrated, because `/player bank` was removed.
-4. Stop and disable the old Windows service, in an administrator terminal:
-   `sc stop "MonsterBot Monitor Service"` and then `sc config "MonsterBot Monitor Service" start= disabled`.
-5. Once everything has run well for a couple of weeks, remove the old Helm releases, container images, DNS records and the Cloudflare Access service token.
-
----
-
 ## Development
 
 Requires Python 3.12 on Windows.
