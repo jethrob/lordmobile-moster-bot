@@ -105,6 +105,20 @@ Only GIFT_STATS and GUILD_LIST exports are imported; other `.xlsx` files are ski
 
 `days` defaults to 30 and can be up to 365.
 
+### What it looks like
+
+**`/player castlename`**: a player's hunting, purchases and kills over the last 30 days.
+
+<img src="docs/screenshots/PlayerCastleName.png" width="420" alt="Result of /player castlename: hunting and purchase totals per level, average points per day, and kills gained">
+
+**`/hunts query`** with *Above*, value *15*, over *30* days: every player averaging more than 15 hunt points a day.
+
+<img src="docs/screenshots/HuntingAverageAbove15Over30Days.png" width="480" alt="Result of /hunts query: list of players with their average hunt points per day">
+
+**`/kills total`** over the last *7* days: the guild's total kills gained.
+
+<img src="docs/screenshots/KillsTotalLast7Days.png" width="440" alt="Result of /kills total: guild kills gained over the past 7 days">
+
 **Players who left the guild.** A player missing from the exports for more than **3 days** (change this on the **Setup** page, 0 = never hide) is left out of `/hunts`, `/purchases`, `/kills` and `/player search`. The days are counted back from the newest export, not from today, so a pause in imports doesn't hide everyone. `/player castlename` still finds them, marked "no longer in the guild exports", so you can look up their history.
 
 **Daily report.** When a new export arrives, MonsterBot posts:
