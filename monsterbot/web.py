@@ -10,7 +10,7 @@ from aiohttp import web
 
 from . import autostart, picker
 from .db import MANUAL_IMPORT, Database
-from .importer import discover_castles, import_file
+from .importer import castle_info, castles_with_info, discover_castles, import_file
 
 # Same design as assets/monsterbot.ico: a monitor with a heartbeat line.
 FAVICON_SVG = (
@@ -96,9 +96,9 @@ async def setup_page(request: web.Request):
     else:
         auto = "<p class=muted>Start with Windows is available in the packaged MonsterBot.exe.</p>"
     root = Path(db.get_setting("root_folder", DEFAULT_ROOT))
-    castles = await asyncio.to_thread(discover_castles, root)
+    castles = await asyncio.to_thread(castles_with_info, root)
     if castles:
-        found = f'<p class="ok">Found {len(castles)} castle(s): {e(", ".join(castles))}</p>'
+        found = f'<p class="ok">Found {len(castles)} castle(s), listed under Castles below.</p>'
     else:
         found = ('<p class="bad">No castle folders found here. Choose the LordsBot <strong>config</strong> folder, '
                  'the one that has a folder per castle IGG ID (usually C:\\LordsBot\\config).</p>')
@@ -107,6 +107,7 @@ async def setup_page(request: web.Request):
     )
     body = f"""
 <section><h2>Status</h2><p class="{status_class}">{e(rt.status)}</p>{bot_info}{auto}</section>
+{castles_section(rt, castles)}
 <section><h2>Settings</h2><form method="post" action="/setup">
 <label>Discord bot token<input type="password" name="token" autocomplete="off"
  placeholder="{"Saved. Paste a new token to replace it" if has_token else "Paste your bot token"}"></label>
@@ -118,6 +119,31 @@ Exports are read from <code>&lt;IGG&gt;\\stats\\exported</code> inside it.</p>{f
 <button>Save</button></form>
 <p class="muted">Don't have a bot yet? Follow "Create your Discord bot" in the README.</p></section>"""
     return page("Setup", body, request.query.get("msg"))
+
+
+def castles_section(rt: Runtime, castles) -> str:
+    if not castles:
+        return ""
+    links_by_folder = {}
+    for link in rt.db.links():
+        links_by_folder.setdefault(link["folder"], []).append(link)
+    rows = []
+    for c in castles:
+        linked = [describe_target(rt.client, l) for l in links_by_folder.get(str(c.export_folder), [])]
+        target = "<br>".join(f"{e(server)} {e(channel)}" for server, channel in linked) or (
+            f'<a class="button" href="/links?igg={c.igg}">Add link</a>')
+        if not c.export_folder.is_dir():
+            latest = '<span class="bad">No exports. Turn on stats export in LordsBot</span>'
+        else:
+            latest = e(c.latest_export) if c.latest_export else '<span class="muted">None yet</span>'
+        rows.append(f"<tr><td>{c.igg}</td><td>{e(rt.db.castle_name(c.igg) or '—')}</td>"
+                    f"<td><strong>{e(c.guild_tag or '—')}</strong></td><td>{latest}</td><td>{target}</td></tr>")
+    return (
+        "<section><h2>Castles</h2><table><tr><th>IGG ID</th><th>Castle</th><th>Guild</th><th>Latest export</th>"
+        f"<th>Linked to</th></tr>{''.join(rows)}</table>"
+        '<p class="muted">Castle names appear once their exports are imported. The guild tag comes from '
+        "LordsBot's newest file for that castle.</p></section>"
+    )
 
 
 async def setup_save(request: web.Request):
@@ -202,15 +228,21 @@ async def links_page(request: web.Request):
     )
     if rt.ready:
         root = Path(rt.db.get_setting("root_folder", DEFAULT_ROOT))
-        castles = await asyncio.to_thread(discover_castles, root)
-        options = "".join(f'<option value="{igg}">{e(castle_label(rt.db, igg))}</option>' for igg in castles)
+        castles = await asyncio.to_thread(castles_with_info, root)
+        options = "".join(
+            f'<option value="{c.igg}">{e(castle_label(rt.db, c.igg))}{f" [{e(c.guild_tag)}]" if c.guild_tag else ""}</option>'
+            for c in castles
+        )
+        prefill = request.query.get("igg", "")
+        prefill = prefill if prefill.isdigit() else ""
         found = (f"{len(castles)} castle(s) found in {e(root)}." if castles
                  else f'No castles found in {e(root)}. Check the folder on <a href="/setup">Setup</a>.')
         add = f"""<form method="post" action="/links">
 <label>Castle IGG ID<input name="igg" list="castles" required inputmode="numeric" pattern="[0-9]+"
- placeholder="e.g. 123456789"></label>
+ placeholder="e.g. 123456789" value="{prefill}"></label>
 <datalist id="castles">{options}</datalist><p class="muted">{found} Pick one from the list or type the IGG ID.</p>
-<label>Guild name (shown in reports)<input name="label" maxlength="50" placeholder="-R-"></label>
+<label>Guild name (shown in reports)<input name="label" maxlength="50"
+ placeholder="Leave empty to use the castle's guild tag"></label>
 <label>Discord server and channel<select name="target" required>{channel_options(rt.client)}</select></label>
 <label class="check"><input type="checkbox" name="post_report" checked> Post the daily report to this channel</label>
 <button>Add link</button></form>"""
@@ -240,7 +272,8 @@ async def links_add(request: web.Request):
     if guild is None or (channel_id is not None and guild.get_channel(channel_id) is None):
         redirect("/links", "That server or channel isn't available to the bot.")
     post_report = bool(form.get("post_report")) and channel_id is not None
-    rt.db.add_link(str(folder), form.get("label", "").strip()[:50], guild_id, channel_id, post_report)
+    label = form.get("label", "").strip()[:50] or (await asyncio.to_thread(castle_info, igg, folder)).guild_tag or ""
+    rt.db.add_link(str(folder), label, guild_id, channel_id, post_report)
     redirect("/links", "Link added. Existing files in the folder are imported within a minute.")
 
 

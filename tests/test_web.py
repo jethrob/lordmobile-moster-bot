@@ -66,7 +66,9 @@ def test_pages_render_and_escape_names(tmp_path, folder):
         assert "#reports" in links and "#readonly" not in links  # only channels the bot can post in
         assert "1 castle(s) found" in links and '<option value="123">123</option>' in links
         setup = await (await client.get("/setup")).text()
-        assert "client_id=42" in setup and "Found 1 castle(s): 123" in setup
+        assert "client_id=42" in setup and "Found 1 castle(s)" in setup
+        assert "<h2>Castles</h2>" in setup and '<td>123</td>' in setup and "None yet" in setup
+        assert "/links?igg=123" in setup  # not linked yet
 
     asyncio.run(run(check)(tmp_path, with_bot=True))
 
@@ -278,5 +280,25 @@ def test_links_show_castle_names(tmp_path, folder):
         rt.db.add_link(str(folder), "-R-", 1, 10, post_report=True)
         text = await (await client.get("/links")).text()
         assert "123 (&lt;Castle&gt;)" in text and "<Castle>" not in text
+
+    asyncio.run(run(check)(tmp_path, with_bot=True))
+
+
+def test_castles_table_and_link_defaults_to_guild_tag(tmp_path, folder):
+    (folder / "2026-07-03 00.00 GIFT_STATS Ax7.xlsx").write_bytes(b"x")
+    cache_only = tmp_path / "LordsBot" / "config" / "456" / "stats" / "cache"
+    cache_only.mkdir(parents=True)
+    (cache_only / "2026-07-03 00-00 CACHE Q&A.json").write_text("x")
+
+    async def check(client, rt):
+        rt.db.set_setting("root_folder", str(tmp_path / "LordsBot" / "config"))
+        links = await (await client.get("/links?igg=123")).text()
+        assert 'value="123"' in links and "[Ax7]" in links and "[Q&amp;A]" in links
+        await client.post("/links", data={"igg": "123", "target": "1:10"}, allow_redirects=False)
+        assert rt.db.links()[0]["label"] == "Ax7"  # empty guild name -> castle's guild tag
+        setup = await (await client.get("/setup")).text()
+        assert "<strong>Ax7</strong>" in setup and "#reports" in setup  # linked channel shown
+        assert "<strong>Q&amp;A</strong>" in setup and "Turn on stats export" in setup
+        assert "/links?igg=456" in setup
 
     asyncio.run(run(check)(tmp_path, with_bot=True))

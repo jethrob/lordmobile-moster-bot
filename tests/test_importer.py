@@ -151,3 +151,27 @@ def test_import_folder_counts_and_recursion(tmp_path):
     assert len(db.day_rows("guild_list", 111, dt.date(2024, 8, 30))) == 95
     manual = [r for r in db.recent_imports() if r["rows"]]
     assert {r["link_id"] for r in manual} == {0} and {r["discord_guild_id"] for r in manual} == {111}
+
+
+def test_guild_tag_from_filename():
+    assert importer.guild_tag_from_name("2026-07-03 00-00 CACHE Ax7.json") == "Ax7"
+    assert importer.guild_tag_from_name("2024-08-30 00.00 GIFT_STATS -R-.xlsx") == "-R-"
+    assert importer.guild_tag_from_name("Guild-2024-28-8 00-00 -R-.xlsx") == "-R-"
+    assert importer.guild_tag_from_name("2024-08-30 00.00 GIFT_STATS.xlsx") is None
+    assert importer.guild_tag_from_name("notes.txt") is None
+
+
+def test_castle_info_newest_tag_wins_and_cache_only_castles(tmp_path):
+    config = tmp_path / "config"
+    stats = config / "563756029" / "stats"
+    (stats / "cache").mkdir(parents=True)
+    for name in ("2026-03-08 00-02 CACHE GXD.json", "2026-07-03 00-00 CACHE Ax7.json", "2026-06-06 16-59 CACHE GXD.json"):
+        (stats / "cache" / name).write_text("x")  # same mtime (copied folder): filename date decides
+    [info] = importer.castles_with_info(config)
+    assert (info.igg, info.guild_tag, info.latest_export) == ("563756029", "Ax7", None)
+    assert info.export_folder == stats / "exported" and importer.discover_folders(config) == []
+
+    (stats / "exported").mkdir()
+    shutil.copy(GIFT, stats / "exported" / "2026-07-04 00.00 GIFT_STATS NEW.xlsx")
+    info = importer.castle_info("563756029", stats / "exported")
+    assert info.guild_tag == "NEW" and info.latest_export == dt.date.today()

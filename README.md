@@ -55,7 +55,7 @@ You'll invite the bot to your server in Step 3. MonsterBot builds the invite lin
 On the **Setup** page:
 
 1. Paste the **bot token** from Step 1.
-2. Check the **LordsBot config folder** (default `C:\LordsBot\config`). LordsBot keeps one folder per castle in it, named after the castle's IGG ID, with the exports in `<IGG ID>\stats\exported`. Click **Browse…** to pick it in a Windows folder window. The page then lists the castles it found, for example *Found 2 castle(s): 123456789, 987654321*.
+2. Check the **LordsBot config folder** (default `C:\LordsBot\config`). LordsBot keeps one folder per castle in it, named after the castle's IGG ID, with the exports in `<IGG ID>\stats\exported`. Click **Browse…** to pick it in a Windows folder window. The **Castles** table then lists every castle it found: IGG ID, castle name (once imported), **guild tag** (taken from LordsBot's newest file for that castle, e.g. `Ax7`), latest export, and which Discord channel it's linked to. A castle marked *No exports* needs stats export switched on in LordsBot. (LordsBot stores the full guild name encrypted, so the tag is what MonsterBot can show.)
 3. Click **Save**. After a few seconds, refresh: the status should say **Connected as YourBot#1234**.
    If it says *Discord rejected the token*, copy the token again (or reset it) and paste it once more.
 4. Click **Invite bot to a server**, choose your Discord server and click **Authorize**.
@@ -68,7 +68,7 @@ The slash commands appear in your server within a minute. If they don't, restart
 On the **Links** page:
 
 1. **Castle IGG ID**: pick the castle from the list, or type its IGG ID. MonsterBot finds its `stats\exported` folder by itself. Once a castle's data has been imported, the list also shows its name.
-2. **Guild name**: shown as the title of the daily report, for example `-R-`.
+2. **Guild name**: shown as the title of the daily report. Leave it empty to use the castle's guild tag.
 3. **Discord server and channel**: the channel the daily report is posted in. Pick "*import only, no posts*" if you only want the slash commands.
 4. Tick **Post the daily report** and click **Add link**.
 

@@ -93,16 +93,64 @@ def discover_castles(root: Path) -> dict[str, Path]:
     config folder itself or the LordsBot folder above it.
     """
     found = {}
-    for pattern in ("*/stats/exported", "config/*/stats/exported"):
-        for folder in root.glob(pattern):
-            igg = folder.parent.parent.name
-            if igg.isdigit() and folder.is_dir():
-                found.setdefault(igg, folder)
+    # A castle counts once it has a stats folder; "exported" only appears after LordsBot's export is enabled.
+    for pattern in ("*/stats", "config/*/stats"):
+        for stats in root.glob(pattern):
+            igg = stats.parent.name
+            if igg.isdigit() and stats.is_dir():
+                found.setdefault(igg, stats / "exported")
     return dict(sorted(found.items(), key=lambda item: int(item[0])))
 
 
+@dataclass(frozen=True)
+class CastleInfo:
+    igg: str
+    export_folder: Path
+    guild_tag: str | None  # e.g. "Ax7", from the newest cache/export filename
+    latest_export: dt.date | None
+
+
+FILENAME_NOISE = re.compile(r"^(CACHE|GIFT_STATS|GUILD_LIST|\d{1,2}[-.]\d{2})$", re.IGNORECASE)
+
+
+def guild_tag_from_name(filename: str) -> str | None:
+    """'2026-07-03 00-00 CACHE Ax7.json' -> 'Ax7'. LordsBot ends every cache and export name with the tag.
+
+    The guild's full name is only stored encrypted, so the tag is what we can show.
+    """
+    words = Path(filename).stem.split()
+    if len(words) < 2 or FILENAME_NOISE.match(words[-1]):
+        return None
+    return words[-1]
+
+
+def castle_info(igg: str, export_folder: Path) -> CastleInfo:
+    stats = export_folder.parent
+    files = [p for sub in ("exported", "cache") if (stats / sub).is_dir() for p in (stats / sub).iterdir() if p.is_file()]
+    # Castles can change guild, so the newest file wins, judged by the date in its name (copying a folder
+    # resets modified times).
+    files.sort(key=lambda p: (_name_date(p.name), p.stat().st_mtime), reverse=True)
+    tag = next((t for t in map(lambda p: guild_tag_from_name(p.name), files) if t), None)
+    exports = [p for p in files if p.parent.name == "exported" and p.suffix.lower() == ".xlsx"]
+    latest = dt.date.fromtimestamp(exports[0].stat().st_mtime) if exports else None
+    return CastleInfo(igg, export_folder, tag, latest)
+
+
+def _name_date(filename: str) -> tuple:
+    """Sort key from a 'YYYY-MM-DD HH-MM' filename prefix, read as year-month-day (LordsBot's current format)."""
+    match = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})\D+(\d{1,2})[-.](\d{2})", filename)
+    if not match:
+        return (dt.date.min, 0, 0)
+    year, a, b, hour, minute = map(int, match.groups())
+    return (_date(year, a, b) or _date(year, b, a) or dt.date.min, hour, minute)
+
+
+def castles_with_info(root: Path) -> list[CastleInfo]:
+    return [castle_info(igg, folder) for igg, folder in discover_castles(root).items()]
+
+
 def discover_folders(root: Path) -> list[Path]:
-    return list(discover_castles(root).values())
+    return [f for f in discover_castles(root).values() if f.is_dir()]
 
 
 def pending_files(db: Database, link: dict, now: float | None = None) -> list[Path]:
