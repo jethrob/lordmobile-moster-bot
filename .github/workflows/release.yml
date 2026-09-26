@@ -26,7 +26,7 @@ jobs:
         run: echo "__version__ = \"${GITHUB_REF_NAME#v}\"" > monsterbot/__init__.py
 
       - name: Build MonsterBot.exe
-        run: pyinstaller --onefile --name MonsterBot --noconfirm run.py
+        run: pyinstaller --onefile --name MonsterBot --icon assets/monsterbot.ico --noconfirm run.py
 
       - name: Checksum
         shell: bash

@@ -1,4 +1,4 @@
-# MonsterBot
+# <img src="assets/monsterbot.png" width="48" align="top" alt=""> MonsterBot
 
 MonsterBot turns your **LordsBot** exports into a **Discord bot** for your Lords Mobile guild. It is one program (`MonsterBot.exe`) that runs on the same Windows PC as LordsBot:
 
@@ -183,7 +183,7 @@ tests/                        pytest suite; tests/samples holds real LordsBot ex
 ### Building and releasing
 
 ```powershell
-pyinstaller --onefile --name MonsterBot run.py     # local build -> dist\MonsterBot.exe
+pyinstaller --onefile --name MonsterBot --icon assets/monsterbot.ico run.py     # local build -> dist\MonsterBot.exe
 ```
 
 Releases are built by GitHub Actions (`.github/workflows/release.yml`). Push a version tag and the workflow runs the tests, builds `MonsterBot.exe` with that version, and publishes a GitHub Release with the exe and its SHA-256 checksum:

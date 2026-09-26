@@ -12,6 +12,17 @@ from . import autostart, picker
 from .db import MANUAL_IMPORT, Database
 from .importer import discover_castles, import_file
 
+# Same design as assets/monsterbot.ico: a monitor with a heartbeat line.
+FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">'
+    '<rect x="32" y="32" width="960" height="960" rx="200" fill="#262c48"/>'
+    '<rect x="174" y="234" width="676" height="462" rx="40" fill="none" stroke="#ebeef5" stroke-width="48"/>'
+    '<rect x="462" y="720" width="100" height="90" fill="#ebeef5"/>'
+    '<rect x="330" y="790" width="364" height="60" rx="30" fill="#ebeef5"/>'
+    '<polyline points="215,470 380,470 440,340 520,600 590,400 640,470 809,470" fill="none" stroke="#4ade80"'
+    ' stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+)
+FAVICON = "data:image/svg+xml," + quote(FAVICON_SVG)
 DEFAULT_ROOT = r"C:\LordsBot\config"
 INVITE_PERMISSIONS = discord.Permissions(view_channel=True, send_messages=True, embed_links=True)
 
@@ -41,7 +52,7 @@ def page(title: str, body: str, msg: str | None = None) -> web.Response:
     notice = f'<p class="notice">{e(msg)}</p>' if msg else ""
     return web.Response(content_type="text/html", text=f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MonsterBot · {e(title)}</title><style>{CSS}</style></head>
+<title>MonsterBot · {e(title)}</title><link rel="icon" href="{FAVICON}"><style>{CSS}</style></head>
 <body><header><strong>MonsterBot</strong><nav>
 <a href="/setup">Setup</a><a href="/links">Links</a><a href="/activity">Activity</a><a href="/data">Data</a></nav></header>
 <main><h1>{e(title)}</h1>{notice}{body}</main></body></html>""")
